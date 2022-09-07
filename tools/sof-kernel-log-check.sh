@@ -421,7 +421,7 @@ ignore_str="$ignore_str"'|nvme0: Admin Cmd\(0x[[:digit:]]+\), I/O Error \(sct 0x
 
 # confirm begin_timestamp is in UNIX timestamp format, otherwise search full log
 if [[ $begin_timestamp =~ ^[0-9]{10} ]]; then
-    cmd="journalctl_cmd --since=@$begin_timestamp"
+    cmd="kernel_logger_cmd --since=@$begin_timestamp"
 else
     die "Invalid begin_timestamp $1 argument: $begin_timestamp"
 fi
@@ -435,7 +435,7 @@ else
 fi
 
 [[ -z "$err" ]] || {
-    type journalctl_cmd
+    type kernel_logger_cmd
     echo "$(date -u '+%Y-%m-%d %T %Z')" "[ERROR]" "Caught kernel log error"
     echo "===========================>>"
     echo "$err"
