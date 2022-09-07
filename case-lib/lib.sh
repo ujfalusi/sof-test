@@ -267,6 +267,7 @@ storage_checks()
 
 setup_kernel_check_point()
 {
+    sudo true
     # Make the check point $SOF_TEST_INTERVAL second(s) earlier to avoid
     # log loss.  Note this may lead to an error caused by one test
     # appear in the next one, see comments in config.sh.  Add 3 extra
@@ -785,10 +786,19 @@ is_sof_used()
 }
 
 # a wrapper to journalctl with required style
-journalctl_cmd()
+kernel_logger_cmd()
 {
-   sudo journalctl -k -q --no-pager --utc --output=short-monotonic \
-     --no-hostname "$@"
+    if [ -x "$(command -v journalctl)" ]; then
+	KERNEL_LOGGER_CMD="journalctl -k -q --no-pager --utc \
+                           --output=short-monotonic \
+                           --no-hostname"
+        LOGGER_PARAM=${@}
+    else
+        KERNEL_LOGGER_CMD="dmesg -k --nopager"
+        LOGGER_PARAM=${@/--priority/--level}
+    fi
+
+    sudo $KERNEL_LOGGER_CMD $LOGGER_PARAM
 }
 
 # Force the exit handler to collect all the logs since boot time instead
@@ -802,7 +812,11 @@ disable_kernel_check_point()
 # shellcheck disable=SC2120
 sof_firmware_boot_complete()
 {
-    journalctl_cmd "$@" | grep -i 'sof.*firmware[[:blank:]]*boot[[:blank:]]*complete'
+    if [ -x "$(command -v journalctl)" ]; then
+       kernel_logger_cmd "$@" | grep -i 'sof.*firmware[[:blank:]]*boot[[:blank:]]*complete'
+    else
+       cat /var/log/kernel.log | grep -i 'sof.*firmware[[:blank:]]*boot[[:blank:]]*complete'
+    fi
 }
 
 # If the firmware is loaded then you probably want to use the newer
@@ -891,7 +905,15 @@ fw_relfilepath()
 fw_relfilepath_from_klogs()
 {
     local rel_filepath
-    rel_filepath=$(journalctl -k |
+    local TEMP_KERNEL_LOG
+
+    if [ -x "$(command -v journalctl)" ]; then
+        TEMP_KERNEL_LOG=`journalctl -k`
+    else
+	TEMP_KERNEL_LOG=`cat /var/log/kernel.log`
+    fi
+
+    rel_filepath=$($TEMP_KERNEL_LOG |
         awk '/sof.*[[:blank:]]request_firmware[[:blank:]]/ {
                sub(/^.*request_firmware/,""); last_loaded_file=$1
              }
@@ -998,11 +1020,11 @@ grep_firmware_info_in_logs()
 {
     # dump the version info and ABI info
     # "head -n" makes this compatible with set -e.
-    journalctl_cmd "$@" | grep "Firmware info" -A1 | head -n 12
+    kernel_logger_cmd "$@" | grep "Firmware info" -A1 | head -n 12
     # For dumping the firmware information when DUT runs IPC4 mode
-    journalctl_cmd "$@" | grep "firmware version" -A1 | head -n 12
+    kernel_logger_cmd "$@" | grep "firmware version" -A1 | head -n 12
     # dump the debug info
-    journalctl_cmd "$@" | grep "Firmware debug build" -A3 | head -n 12
+    kernel_logger_cmd "$@" | grep "Firmware debug build" -A3 | head -n 12
 }
 
 # check if NTP Synchronized, if so return 0 otherwise return 1
